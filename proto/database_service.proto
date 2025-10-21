@@ -1,0 +1,128 @@
+syntax = "proto3";
+package database_api;
+
+service DatabaseService {
+  rpc GetDatabaseList(Void) returns (DatabaseList);
+  //rpc CreateDatabase(Database) returns (Void);
+  rpc DropDatabase(Database) returns (Void);
+  rpc DeleteDatabase(Database) returns (Void);
+  
+  rpc Create_backup(Database) returns (Void);
+  //rpc send_backup(Database) returns ();
+  rpc Export(Database) returns (Void);
+
+  //rpc AddColumn() returns (Void);
+  //rpc DeleteColumn() returns (Void);
+  //rpc ChangeColumn() returns (Void);
+  
+  rpc Select(SelectRequest) returns (RecordsInfo);
+  rpc Add(AddRequest) returns (Void);
+  rpc Delete(DeleteRequest) returns (Void);
+  rpc Change(ChangeRequest) returns (Void);
+}
+
+//enum ResponseStatus {}
+
+enum Type {
+  string = 0;
+  i32 = 1;
+  u64 = 2;
+  bool = 3;
+  f32 = 4;
+  f64 = 5;
+  i8 = 6;
+  i16 = 7;
+  i64 = 8;
+  u8 = 9;
+  u16 = 10;
+  u32 = 11;
+}
+
+enum Order {
+  ascending = 0;
+  descending = 1;
+}
+
+enum Filter {
+  equal = 0;
+  less = 1;
+  greater = 2;
+  less_eq = 3;
+  greater_eq = 4;
+  contains = 5;
+  starts_with = 6;
+  ends_with = 7;
+}
+
+message Database {
+  string name = 1;
+}
+
+message DatabaseList {
+  repeated Database databases = 1;
+}
+
+message Field {
+  string name = 1;
+  Type type = 2;
+  bool nullable = 3;
+}
+
+message PrimaryKey {
+  repeated Field pk = 1;
+}
+
+message FilterOption {
+  Field column = 1;
+  Filter filter = 2;
+}
+
+message OrderOption {
+  Field column = 1;
+  Order order = 2;
+}
+
+message Value {
+  oneof kind {
+    string string_value = 1;
+    int64 int_value = 2;
+    double double_value = 3;
+    bool bool_value = 4;
+  }
+}
+
+message ValueSequence {
+  repeated Value sequence = 1;
+}
+
+message RecordsInfo {
+  repeated Field pattern = 1;
+  repeated ValueSequence records = 2;
+}
+
+message AddRequest {
+  Database database = 1;
+  RecordsInfo records = 2;
+}
+
+// select limit filter order ?? group by, distinct
+message SelectRequest {
+  Database database = 1;
+  repeated Field pattern = 2;
+  repeated FilterOption filters = 3;
+  repeated OrderOption order_options = 4;
+}
+
+message DeleteRequest {
+  Database database = 1;
+  repeated FilterOption filters = 3;
+}
+
+message ChangeRequest {
+  Database database = 1;
+  repeated Field pattern = 2;
+  repeated ValueSequence new_values = 3;
+  repeated FilterOption filters = 4;
+}
+
+message Void {}
