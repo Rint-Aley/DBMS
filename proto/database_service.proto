@@ -1,24 +1,24 @@
 syntax = "proto3";
-package database_api;
+package table_api;
 
-service DatabaseService {
-  rpc GetDatabaseList(Void) returns (DatabaseList);
-  //rpc CreateDatabase(Database) returns (Void);
-  rpc DropDatabase(Database) returns (Void);
-  rpc DeleteDatabase(Database) returns (Void);
+service TableService {
+  rpc GetTableList(Void) returns (TableList);
+  //rpc CreateTable(Table) returns (Void);
+  rpc DropTable(Table) returns (Void);
+  rpc DeleteTable(Table) returns (Void);
   
-  rpc Create_backup(Database) returns (Void);
-  //rpc send_backup(Database) returns ();
-  rpc Export(Database) returns (Void);
+  rpc CreateBackup(Table) returns (Void);
+  //rpc send_backup(Table) returns ();
+  rpc Export(Table) returns (Void);
 
   //rpc AddColumn() returns (Void);
   //rpc DeleteColumn() returns (Void);
   //rpc ChangeColumn() returns (Void);
   
-  rpc Select(SelectRequest) returns (RecordsInfo);
-  rpc Add(AddRequest) returns (Void);
-  rpc Delete(DeleteRequest) returns (Void);
-  rpc Change(ChangeRequest) returns (Void);
+  rpc SelectRecords(SelectRequest) returns (RecordsInfo);
+  rpc AddRecords(AddRequest) returns (Void);
+  rpc DeleteRecords(DeleteRequest) returns (Void);
+  rpc ChangeRecords(ChangeRequest) returns (Void);
 }
 
 //enum ResponseStatus {}
@@ -54,12 +54,12 @@ enum Filter {
   ends_with = 7;
 }
 
-message Database {
+message Table {
   string name = 1;
 }
 
-message DatabaseList {
-  repeated Database databases = 1;
+message TableList {
+  repeated Table tables = 1;
 }
 
 message Field {
@@ -101,25 +101,25 @@ message RecordsInfo {
 }
 
 message AddRequest {
-  Database database = 1;
+  Table table = 1;
   RecordsInfo records = 2;
 }
 
 // select limit filter order ?? group by, distinct
 message SelectRequest {
-  Database database = 1;
+  Table table = 1;
   repeated Field pattern = 2;
   repeated FilterOption filters = 3;
   repeated OrderOption order_options = 4;
 }
 
 message DeleteRequest {
-  Database database = 1;
+  Table table = 1;
   repeated FilterOption filters = 3;
 }
 
 message ChangeRequest {
-  Database database = 1;
+  Table table = 1;
   repeated Field pattern = 2;
   repeated ValueSequence new_values = 3;
   repeated FilterOption filters = 4;
