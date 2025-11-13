@@ -10,3 +10,9 @@ pub use filters::Filter;
 pub use filters::FilterOption;
 pub use free_space::FreeSpace;
 pub use table_metadata::TableMetadata;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataPosition {
+    pub page: u16,
+    pub cell: u16,
+}

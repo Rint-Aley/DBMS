@@ -1,5 +1,3 @@
-use std::iter;
-
 const U16_SIZE: usize = 2;
 const FREE_SPACE_SECTION_SIZE: usize = 3 * U16_SIZE;
 
@@ -80,6 +78,10 @@ impl FreeSpace {
         }
         self.begin += shift;
         Ok(self.free_space() == 0)
+    }
+
+    pub fn extend_end(&mut self, shift: u16) {
+        self.end += shift;
     }
 }
 

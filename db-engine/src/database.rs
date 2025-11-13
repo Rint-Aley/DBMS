@@ -2,9 +2,11 @@ pub mod structures;
 
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::os::windows::fs::FileExt;
 use std::path::Path;
 use structures::*;
+use tokio::net::tcp::ReuniteError;
 
 const DESCRIPTION_FILE_NAME: &str = "descriptor";
 const FREE_SPACE_FILE_NAME: &str = "free_space";
@@ -33,21 +35,6 @@ pub fn create_table(database_path: &str, name: &str, metadata: TableMetadata) {
     fs::create_dir(&pages).unwrap();
     let page = File::create(pages.join("0")).unwrap();
     page.set_len(PAGE_SIZE_BYTES).unwrap();
-}
-
-pub fn add_field(table_path: &str, new_field: Field) -> Result<(), Box<dyn Error>> {
-    if !is_table_exists(table_path) {};
-    if get_fields(table_path)
-        .unwrap()
-        .iter()
-        .any(|field| field.name == new_field.name)
-    {};
-    // serialize new field
-    unimplemented!();
-}
-
-fn get_fields(table_path: &str) -> Result<Vec<Field>, Box<dyn Error>> {
-    unimplemented!();
 }
 
 pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), &'static str> {
@@ -84,7 +71,7 @@ pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), &'static
         let current_number_of_pages: u16 = 0; // todo
         for i in current_number_of_pages..(current_number_of_pages + new_pages_required) {
             File::create(pages_dir_path.join(i.to_string())).unwrap();
-            free_space_data.push(FreeSpace::new(i, 0, records_per_page).unwrap());
+            free_space_data.push(FreeSpace::new(i, 0, records_per_page)?);
         }
     }
 
@@ -137,6 +124,89 @@ fn write_records_in_row(
             .unwrap();
     }
     Ok(())
+}
+
+fn delete_records_by_position(
+    table_path: &str,
+    positions: &[DataPosition],
+) -> Result<(), &'static str> {
+    if positions.is_empty() {
+        return Ok(());
+    }
+
+    let table_dir = Path::new(table_path);
+    let free_space_path = table_dir.join(FREE_SPACE_FILE_NAME);
+    let mut current_free_cells =
+        FreeSpace::deserialize_multiple(&fs::read(&free_space_path).unwrap()).unwrap();
+    let mut new_free_cells: Vec<FreeSpace> = Vec::new();
+    current_free_cells.extend_from_slice(
+        &positions
+            .iter()
+            .map(|position| {
+                FreeSpace::new(position.page, position.cell, position.cell + 1).unwrap()
+            })
+            .collect::<Vec<FreeSpace>>(),
+    );
+
+    current_free_cells.sort_by_key(|cell| (cell.page, cell.begin()));
+    let mut free_section = FreeSpace::new(
+        current_free_cells[0].page,
+        current_free_cells[0].begin(),
+        current_free_cells[0].end(),
+    )?;
+
+    for value in current_free_cells.iter().skip(1) {
+        if value.page != free_section.page || free_section.end() < value.begin() {
+            new_free_cells.push(free_section.clone());
+            free_section = value.clone();
+            continue;
+        } else if value.end() > free_section.end() {
+            free_section.extend_end(value.end() - free_section.end());
+        }
+    }
+    new_free_cells.push(free_section);
+
+    fs::write(
+        &free_space_path,
+        FreeSpace::serialize_multiple(&new_free_cells),
+    )
+    .unwrap();
+    Ok(())
+}
+
+fn get_records_by_position(
+    table_path: &str,
+    positions: &[DataPosition],
+    record_structure: &[Type],
+    record_size: u16,
+) -> Result<Vec<Vec<Type>>, &'static str> {
+    if positions.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let page_dir = Path::new(table_path).join(PAGES_DIRECTORY_NAME);
+    let mut positions = positions.to_vec();
+    positions.sort_by_key(|position| (position.page, position.cell));
+
+    let mut current_page_idx = positions[0].page;
+    let page_path = page_dir.join(positions[0].page.to_string());
+    let mut current_page = File::open(page_path).unwrap();
+    let mut values = Vec::with_capacity(positions.len());
+    for position in positions {
+        if position.page != current_page_idx {
+            let page_path = page_dir.join(position.page.to_string());
+            current_page = File::open(page_path).unwrap();
+            current_page_idx = position.page;
+        }
+        current_page
+            .seek(SeekFrom::Start(position.cell as u64))
+            .unwrap();
+        let mut buffer = Vec::with_capacity(record_size as usize);
+        current_page.read_exact(&mut buffer).unwrap();
+        values.push(structures::dbtype::deserialize_value(&buffer, record_structure).unwrap());
+    }
+
+    Ok(values)
 }
 
 fn get_records(

@@ -110,6 +110,26 @@ pub fn serialize_values(data: &[Type]) -> Vec<u8> {
     result
 }
 
+pub fn deserialize_value(
+    data: &[u8],
+    record_structure: &[Type],
+) -> Result<Vec<Type>, &'static str> {
+    let record_len = record_structure.iter().map(|t| t.size() as usize).sum();
+    if data.len() < record_len {
+        return Err("Buffer is too short.");
+    }
+    let mut result = Vec::with_capacity(record_structure.len());
+    let mut cursor = 0;
+    for t in record_structure {
+        result.push(Type::deserialize(
+            &data[cursor..(cursor + t.size() as usize)],
+            t,
+        )?);
+        cursor += t.size() as usize;
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
