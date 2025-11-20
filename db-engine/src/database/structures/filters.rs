@@ -12,6 +12,16 @@ pub enum Filter {
 }
 
 pub struct FilterOption {
-    filed: Field,
+    field: Field,
     filter: Filter,
+}
+
+impl FilterOption {
+    pub fn field(&self) -> &Field {
+        &self.field
+    }
+
+    pub fn filter(&self) -> &Filter {
+        &self.filter
+    }
 }

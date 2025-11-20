@@ -1,15 +1,16 @@
 const U16_SIZE: usize = 2;
-const FREE_SPACE_SECTION_SIZE: usize = 3 * U16_SIZE;
+const U64_SIZE: usize = 8;
+const FREE_SPACE_SECTION_SIZE: usize = 2 * U16_SIZE + U64_SIZE;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FreeSpace {
-    pub page: u16,
+    pub page: u64,
     begin: u16,
     end: u16,
 }
 
 impl FreeSpace {
-    pub fn new(page: u16, begin: u16, end: u16) -> Result<Self, &'static str> {
+    pub fn new(page: u64, begin: u16, end: u16) -> Result<Self, &'static str> {
         if begin >= end {
             Err("The begin index is bigger than the end index.")
         } else {
@@ -19,9 +20,9 @@ impl FreeSpace {
 
     pub fn deserialize(data: &[u8; FREE_SPACE_SECTION_SIZE]) -> Self {
         FreeSpace {
-            page: u16::from_le_bytes([data[0], data[1]]),
-            begin: u16::from_le_bytes([data[2], data[3]]),
-            end: u16::from_le_bytes([data[4], data[5]]),
+            page: u64::from_le_bytes(data[0..8].try_into().unwrap()),
+            begin: u16::from_le_bytes([data[8], data[9]]),
+            end: u16::from_le_bytes([data[10], data[11]]),
         }
     }
 
@@ -46,9 +47,9 @@ impl FreeSpace {
 
     pub fn serialize(&self) -> [u8; FREE_SPACE_SECTION_SIZE] {
         let mut result: [u8; FREE_SPACE_SECTION_SIZE] = [0; FREE_SPACE_SECTION_SIZE];
-        result[0..2].copy_from_slice(&self.page.to_le_bytes());
-        result[2..4].copy_from_slice(&self.begin.to_le_bytes());
-        result[4..6].copy_from_slice(&self.end.to_le_bytes());
+        result[0..8].copy_from_slice(&self.page.to_le_bytes());
+        result[8..10].copy_from_slice(&self.begin.to_le_bytes());
+        result[10..12].copy_from_slice(&self.end.to_le_bytes());
         result
     }
 

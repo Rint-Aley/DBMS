@@ -1,17 +1,20 @@
 pub mod structures;
 
-use std::error::Error;
-use std::fs::{self, File};
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::windows::fs::FileExt;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs::{self, File, metadata};
+use std::hash::Hash;
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use structures::*;
-use tokio::net::tcp::ReuniteError;
+
+use crate::database;
 
 const DESCRIPTION_FILE_NAME: &str = "descriptor";
 const FREE_SPACE_FILE_NAME: &str = "free_space";
 const PAGES_DIRECTORY_NAME: &str = "pages";
-const PAGE_SIZE_BYTES: u64 = 4096;
+const NUMBER_OF_PAGES_FILE_NAME: &str = "number";
+const INDEXES_DIRECTORY_NAME: &str = "indexes";
+const PAGE_SIZE_BYTES: u16 = 4096;
 
 pub fn create_table(database_path: &str, name: &str, metadata: TableMetadata) {
     let table_directory = Path::new(database_path).join(name);
@@ -34,7 +37,51 @@ pub fn create_table(database_path: &str, name: &str, metadata: TableMetadata) {
     let pages = table_directory.join(PAGES_DIRECTORY_NAME);
     fs::create_dir(&pages).unwrap();
     let page = File::create(pages.join("0")).unwrap();
-    page.set_len(PAGE_SIZE_BYTES).unwrap();
+    page.set_len(PAGE_SIZE_BYTES as u64).unwrap();
+    write_number_of_pages(&table_directory, 1).unwrap();
+
+    let indexes_dir = table_directory.join(INDEXES_DIRECTORY_NAME);
+    fs::create_dir(&indexes_dir).unwrap();
+    for field in metadata.fields() {
+        let mut index_file = File::create(indexes_dir.join(&field.name)).unwrap();
+        let map: BTreeMap<Type, Vec<DataPosition>> = BTreeMap::new();
+        let config = bincode::config::standard().with_little_endian();
+        bincode::encode_into_std_write(map, &mut index_file, config).unwrap();
+    }
+}
+
+pub fn clear_table(table_path: &Path) -> Result<(), String> {
+    // let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
+    // let num_of_pages_path = table_path.join(NUMBER_OF_PAGES_FILE_NAME);
+    // match fs::read_dir(pages_dir) {
+    //     Ok(entries) => {
+    //         for entry in entries {
+    //             if let Ok(file) = entry {
+    //                 fs::remove_file(file.path());
+    //             }
+    //         }
+    //         Ok(())
+    //     }
+    //     Err(e) => Err(e.to_string()),
+    // }
+
+    // delete all pages but the first, update number of pages, update free space
+    unimplemented!()
+}
+
+pub fn delete_table(table_path: &Path) -> Result<(), String> {
+    match fs::remove_dir_all(table_path) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+pub fn add_index() {
+    unimplemented!()
+}
+
+pub fn delete_index() {
+    unimplemented!()
 }
 
 pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), &'static str> {
@@ -43,38 +90,44 @@ pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), &'static
     }
 
     let table_path = Path::new(table_path);
-    let pages_dir_path = table_path.join(PAGES_DIRECTORY_NAME);
+    let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
+    let indexes_dir = table_path.join(INDEXES_DIRECTORY_NAME);
+    let free_space_path = table_path.join(FREE_SPACE_FILE_NAME);
 
     let raw_data = fs::read(table_path.join(DESCRIPTION_FILE_NAME)).unwrap();
     let table_metadata = TableMetadata::deserialize(&raw_data).unwrap();
 
-    // validate 'values' vector
-    if records
-        .iter()
-        .all(|record| record.len() as u16 == table_metadata.record_size())
-    {}
+    // TODO: validate 'values' vector and CHECK FOR PRIMARY KEY UNIQUENESS
+    // if records
+    //     .iter()
+    //     .all(|record| record.len() as u16 == table_metadata.record_size())
+    // {}
     //values.iter().all(|record| record.iter().all(|value| value.type_id() == table_metadata.));
 
-    let raw_data = fs::read(table_path.join(FREE_SPACE_FILE_NAME)).unwrap();
+    let raw_data = fs::read(&free_space_path).unwrap();
     let mut free_space_data = FreeSpace::deserialize_multiple(&raw_data).unwrap();
 
-    let free_cells: u16 = free_space_data
+    let num_of_free_cells: u64 = free_space_data
         .iter()
-        .map(|free_space| free_space.free_space())
+        .map(|free_space| free_space.free_space() as u64)
         .sum();
 
-    let required_cells = records.len() as u16;
+    let required_num_of_free_cells = records.len() as u64;
 
-    if free_cells < required_cells {
-        let records_per_page = PAGE_SIZE_BYTES as u16 / table_metadata.record_size();
-        let new_pages_required = required_cells.div_ceil(records_per_page);
-        let current_number_of_pages: u16 = 0; // todo
+    // If table lack of free space to store data it creates new pages
+    if num_of_free_cells < required_num_of_free_cells {
+        let records_per_page = PAGE_SIZE_BYTES / table_metadata.record_size();
+        let new_pages_required = required_num_of_free_cells.div_ceil(records_per_page as u64);
+        let current_number_of_pages = read_number_of_pages(table_path).unwrap();
         for i in current_number_of_pages..(current_number_of_pages + new_pages_required) {
-            File::create(pages_dir_path.join(i.to_string())).unwrap();
+            File::create(pages_dir.join(i.to_string())).unwrap();
             free_space_data.push(FreeSpace::new(i, 0, records_per_page)?);
         }
+        write_number_of_pages(table_path, current_number_of_pages + new_pages_required).unwrap();
     }
 
+    // Writing records
+    let mut records_position: HashMap<usize, DataPosition> = HashMap::new();
     let mut free_cell_idx: usize = 0;
     let mut current_record: usize = 0;
     while current_record < records.len() {
@@ -82,17 +135,29 @@ pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), &'static
             (records.len() - current_record) as u16,
             free_space_data[free_cell_idx].free_space(),
         );
+        let free_position_begining =
+            free_space_data[free_cell_idx].begin() * table_metadata.record_size();
 
         let mut page =
-            File::open(pages_dir_path.join(free_space_data[free_cell_idx].page.to_string()))
-                .unwrap();
-        write_records_in_row(
-            &mut page,
-            &records[current_record..(current_record + records_to_add as usize)],
-            free_space_data[free_cell_idx].begin(),
-            table_metadata.record_size(),
-        )
-        .unwrap();
+            File::open(pages_dir.join(free_space_data[free_cell_idx].page.to_string())).unwrap();
+
+        page.seek(SeekFrom::Start(free_position_begining as u64))
+            .unwrap();
+        let mut record_position = free_position_begining;
+        for i in 0..records_to_add as usize {
+            page.write_all(&structures::dbtype::serialize_values(
+                records[current_record + i],
+            ))
+            .unwrap();
+            records_position.insert(
+                current_record + i,
+                DataPosition {
+                    page: free_space_data[free_cell_idx].page,
+                    cell: record_position,
+                },
+            );
+            record_position += table_metadata.record_size();
+        }
 
         if let Ok(free_cell_empty) = free_space_data[free_cell_idx].move_begining(records_to_add)
             && free_cell_empty
@@ -103,33 +168,273 @@ pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), &'static
     }
 
     fs::write(
-        table_path.join(DESCRIPTION_FILE_NAME),
+        free_space_path,
         FreeSpace::serialize_multiple(&free_space_data[free_cell_idx..]),
     )
     .unwrap();
 
-    // todo: updating indexes (including pk)
+    // Updating indexes
+    let fields = table_metadata.fields();
+    let config = bincode::config::standard().with_little_endian();
+    for &index_idx in table_metadata.indexes_idx() {
+        let index_name = &fields[index_idx as usize].name;
+        let mut index_file = File::open(indexes_dir.join(index_name)).unwrap();
+        let mut index_map: BTreeMap<Type, Vec<DataPosition>> =
+            bincode::decode_from_std_read(&mut index_file, config).unwrap();
+        for (i, &record) in records.iter().enumerate() {
+            index_map
+                .entry(record[index_idx as usize].clone())
+                .or_insert_with(Vec::new)
+                .push(records_position.get(&i).unwrap().clone());
+        }
+        bincode::encode_into_std_write(index_map, &mut index_file, config).unwrap();
+    }
     Ok(())
 }
 
-fn write_records_in_row(
-    file: &mut File,
-    values: &[&[Type]],
-    position: u16,
+pub fn get_records(
+    table_path: &Path,
+    filters: &[FilterOption],
+) -> Result<Vec<Vec<Type>>, &'static str> {
+    let descriptor = Path::new(table_path).join(DESCRIPTION_FILE_NAME);
+    let metadata: TableMetadata =
+        TableMetadata::deserialize(&fs::read(descriptor).unwrap()).unwrap();
+    let positions = get_positions(table_path, filters).unwrap();
+    let db_structure: Vec<Type> = metadata
+        .fields()
+        .iter()
+        .map(|field| field.type_.clone())
+        .collect();
+    get_records_by_position(
+        table_path,
+        &positions,
+        &db_structure,
+        metadata.record_size(),
+    )
+}
+
+fn get_positions(
+    table_path: &Path,
+    filters: &[FilterOption],
+) -> Result<Vec<DataPosition>, &'static str> {
+    let indexes_dir = table_path.join(INDEXES_DIRECTORY_NAME);
+    let descriptor = table_path.join(DESCRIPTION_FILE_NAME);
+    let metadata = TableMetadata::deserialize(&fs::read(descriptor).unwrap()).unwrap();
+
+    if filters.is_empty() {
+        return get_all_positions(table_path, &metadata);
+    }
+
+    // TODO: check if filter option is valid (fileds corresponds to the exicting ones)
+
+    // if there are indexed filters check all of them first (if not than get all records)
+    // for every other field do a linear search
+
+    let indexed_fields: HashSet<String> = metadata
+        .indexes()
+        .iter()
+        .map(|&field| field.name.clone())
+        .collect();
+    let mut indexed_filters = Vec::new();
+    let mut unindexed_filters = Vec::new();
+    for filter in filters {
+        if indexed_fields.contains(&filter.field().name) {
+            indexed_filters.push(filter);
+        } else {
+            unindexed_filters.push(filter);
+        }
+    }
+
+    let mut positions: HashSet<DataPosition>;
+    if indexed_filters.is_empty() {
+        positions = get_all_positions(table_path, &metadata)
+            .unwrap()
+            .into_iter()
+            .collect();
+    } else {
+        // TODO: Skip one iteration in for loop and move it here
+        positions = get_all_positions(table_path, &metadata)
+            .unwrap()
+            .into_iter()
+            .collect();
+    }
+    let config = bincode::config::standard().with_little_endian();
+    for filter in indexed_filters {
+        let index_path = indexes_dir.join(&filter.field().name);
+        let mut index_file = File::open(&index_path).unwrap();
+        let index: BTreeMap<Type, Vec<DataPosition>> =
+            bincode::decode_from_std_read(&mut index_file, config).unwrap();
+        match filter.filter() {
+            Filter::Equal => {
+                match index.get(&filter.field().type_) {
+                    Some(new_positions) => {
+                        if new_positions.is_empty() {
+                            return Ok(Vec::new());
+                        }
+                        positions = positions
+                            .intersection(&HashSet::from_iter(new_positions.clone().into_iter()))
+                            .cloned()
+                            .collect();
+                    }
+                    None => return Ok(Vec::new()),
+                };
+            }
+            _ => unimplemented!(),
+        }
+    }
+    for filter in unindexed_filters {
+        linear_search(&mut positions, table_path, filter, &metadata).unwrap();
+    }
+
+    Ok(positions.into_iter().collect())
+}
+
+pub fn delete_records() {
+    // find records according to a filter
+    // delete it from indexes
+    // delte records at these positions
+    unimplemented!()
+}
+
+pub fn change_records() {
+    // find records according to a filter
+    // changed values
+    // check for uniquenes in pk is changed
+    unimplemented!()
+}
+
+fn get_records_by_position(
+    table_path: &Path,
+    positions: &[DataPosition],
+    record_structure: &[Type],
     record_size: u16,
-) -> Result<(), std::io::Error> {
-    file.seek(SeekFrom::Start((position * record_size) as u64))?;
-    for value in values {
-        file.write_all(&structures::dbtype::serialize_values(value))
+) -> Result<Vec<Vec<Type>>, &'static str> {
+    if positions.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let page_dir = table_path.join(PAGES_DIRECTORY_NAME);
+    let mut positions = positions.to_vec();
+    positions.sort_by_key(|position| (position.page, position.cell));
+
+    let mut current_page_idx = positions[0].page;
+    let page_path = page_dir.join(positions[0].page.to_string());
+    let mut current_page = File::open(page_path).unwrap();
+    let mut values = Vec::with_capacity(positions.len());
+    for position in positions {
+        if position.page != current_page_idx {
+            let page_path = page_dir.join(position.page.to_string());
+            current_page = File::open(page_path).unwrap();
+            current_page_idx = position.page;
+        }
+        current_page
+            .seek(SeekFrom::Start(position.cell as u64))
             .unwrap();
+        let mut buffer = Vec::with_capacity(record_size as usize);
+        current_page.read_exact(&mut buffer).unwrap();
+        values.push(structures::dbtype::deserialize_value(&buffer, record_structure).unwrap());
+    }
+
+    Ok(values)
+}
+
+fn linear_search(
+    data: &mut HashSet<DataPosition>,
+    table_path: &Path,
+    filter: &FilterOption,
+    metadata: &TableMetadata,
+) -> Result<(), &'static str> {
+    let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
+    let mut data_vec: Vec<DataPosition> = data.clone().into_iter().collect();
+    data_vec.sort_by_key(|position| position.page);
+
+    let record_structure: Vec<Type> = metadata
+        .fields()
+        .iter()
+        .map(|field| field.type_.clone())
+        .collect();
+    let record_size: u16 = record_structure.iter().map(|t| t.size() as u16).sum();
+    let mut number_of_filtered_field = 0;
+    for (i, field) in metadata.fields().iter().enumerate() {
+        if field.name == filter.field().name {
+            number_of_filtered_field = i;
+        }
+    }
+
+    let mut current_page_num = data_vec[0].page;
+    let page_path = pages_dir.join(current_page_num.to_string());
+    let mut page_content: Vec<u8> = fs::read(page_path).unwrap();
+
+    for position in data_vec {
+        if current_page_num != position.page {
+            current_page_num = position.page;
+            let page_path = pages_dir.join(current_page_num.to_string());
+            page_content = fs::read(page_path).unwrap();
+        }
+        let record = dbtype::deserialize_value(
+            &page_content[(position.cell as usize)..(position.cell + record_size) as usize],
+            &record_structure,
+        )
+        .unwrap();
+        if record[number_of_filtered_field] != filter.field().type_ {
+            data.remove(&position);
+        }
     }
     Ok(())
+}
+
+fn get_all_positions(
+    table_path: &Path,
+    metadata: &TableMetadata,
+) -> Result<Vec<DataPosition>, &'static str> {
+    let free_space_path = table_path.join(FREE_SPACE_FILE_NAME);
+    let num_of_pages = read_number_of_pages(table_path).unwrap();
+    let record_size = metadata.record_size();
+    let records_per_page = PAGE_SIZE_BYTES / record_size;
+
+    let mut free_spaces =
+        FreeSpace::deserialize_multiple(&fs::read(free_space_path).unwrap()).unwrap();
+    free_spaces.sort_by_key(|free_space| (free_space.page, free_space.begin()));
+
+    let mut free_space_idx = 0;
+    let mut begining;
+    let mut positions = Vec::new();
+    let generate_positions = |page_num: u64, begin_position: u16, end_position: u16| {
+        (begin_position..end_position)
+            .map(|position| DataPosition {
+                page: page_num,
+                cell: position * record_size,
+            })
+            .collect()
+    };
+    // work with corner values
+    for page_num in 0..num_of_pages {
+        begining = 0;
+        while free_spaces[free_space_idx].page == page_num {
+            positions.append(&mut generate_positions(
+                page_num,
+                begining,
+                free_spaces[free_space_idx].begin(),
+            ));
+            begining = free_spaces[free_space_idx].end();
+            free_space_idx += 1;
+        }
+        if begining < records_per_page {
+            positions.append(&mut generate_positions(
+                page_num,
+                begining,
+                records_per_page,
+            ));
+        }
+    }
+    Ok(positions)
 }
 
 fn delete_records_by_position(
     table_path: &str,
     positions: &[DataPosition],
 ) -> Result<(), &'static str> {
+    // TODO: deleting page when it depletes (rename last page and update number of pages)
     if positions.is_empty() {
         return Ok(());
     }
@@ -174,46 +479,16 @@ fn delete_records_by_position(
     Ok(())
 }
 
-fn get_records_by_position(
-    table_path: &str,
-    positions: &[DataPosition],
-    record_structure: &[Type],
-    record_size: u16,
-) -> Result<Vec<Vec<Type>>, &'static str> {
-    if positions.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let page_dir = Path::new(table_path).join(PAGES_DIRECTORY_NAME);
-    let mut positions = positions.to_vec();
-    positions.sort_by_key(|position| (position.page, position.cell));
-
-    let mut current_page_idx = positions[0].page;
-    let page_path = page_dir.join(positions[0].page.to_string());
-    let mut current_page = File::open(page_path).unwrap();
-    let mut values = Vec::with_capacity(positions.len());
-    for position in positions {
-        if position.page != current_page_idx {
-            let page_path = page_dir.join(position.page.to_string());
-            current_page = File::open(page_path).unwrap();
-            current_page_idx = position.page;
-        }
-        current_page
-            .seek(SeekFrom::Start(position.cell as u64))
-            .unwrap();
-        let mut buffer = Vec::with_capacity(record_size as usize);
-        current_page.read_exact(&mut buffer).unwrap();
-        values.push(structures::dbtype::deserialize_value(&buffer, record_structure).unwrap());
-    }
-
-    Ok(values)
+fn read_number_of_pages(database_path: &Path) -> Result<u64, &'static str> {
+    let number_of_pages_path = database_path.join(NUMBER_OF_PAGES_FILE_NAME);
+    let buffer: [u8; 8] = fs::read(number_of_pages_path).unwrap().try_into().unwrap();
+    Ok(u64::from_le_bytes(buffer))
 }
 
-fn get_records(
-    table_path: &str,
-    filters: Vec<FilterOption>,
-) -> Result<Vec<Vec<Type>>, Box<dyn Error>> {
-    unimplemented!();
+fn write_number_of_pages(database_path: &Path, value: u64) -> Result<(), &'static str> {
+    let number_of_pages_path = database_path.join(NUMBER_OF_PAGES_FILE_NAME);
+    fs::write(number_of_pages_path, value.to_le_bytes()).unwrap();
+    Ok(())
 }
 
 // Checks that overall table structure is valid

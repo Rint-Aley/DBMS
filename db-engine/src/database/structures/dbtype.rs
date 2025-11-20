@@ -1,5 +1,8 @@
+use bincode::{Decode, Encode};
+use std::cmp::Ordering;
+
 #[repr(u8)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub enum Type {
     //String(String),
     I8(i8) = 1,
@@ -98,6 +101,53 @@ impl Type {
                     .unwrap()
                     .to_string(),
             )),
+        }
+    }
+
+    fn data_cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Type::I8(a), Type::I8(b)) => a.cmp(b),
+            (Type::I16(a), Type::I16(b)) => a.cmp(b),
+            (Type::I32(a), Type::I32(b)) => a.cmp(b),
+            (Type::I64(a), Type::I64(b)) => a.cmp(b),
+            (Type::I128(a), Type::I128(b)) => a.cmp(b),
+            (Type::U8(a), Type::U8(b)) => a.cmp(b),
+            (Type::U16(a), Type::U16(b)) => a.cmp(b),
+            (Type::U32(a), Type::U32(b)) => a.cmp(b),
+            (Type::U64(a), Type::U64(b)) => a.cmp(b),
+            (Type::U128(a), Type::U128(b)) => a.cmp(b),
+            (Type::Varchar(len_a, s_a), Type::Varchar(len_b, s_b)) => {
+                // Compare length first, then string
+                match len_a.cmp(len_b) {
+                    Ordering::Equal => s_a.cmp(s_b),
+                    ordering => ordering,
+                }
+            }
+            (Type::Boolean(a), Type::Boolean(b)) => a.cmp(b),
+            _ => Ordering::Equal, // Should never happen since we check discriminant first
+        }
+    }
+}
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        self.type_id() == other.type_id() && self.data_cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Type {}
+
+impl PartialOrd for Type {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Type {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.type_id().cmp(&other.type_id()) {
+            Ordering::Equal => self.data_cmp(other),
+            ordering => ordering,
         }
     }
 }

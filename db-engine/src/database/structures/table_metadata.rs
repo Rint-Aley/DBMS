@@ -98,4 +98,19 @@ impl TableMetadata {
     pub fn fields(&self) -> &[Field] {
         &self.fields
     }
+
+    pub fn primary_key(&self) -> u16 {
+        self.primary_key_index
+    }
+
+    pub fn indexes(&self) -> Vec<&Field> {
+        self.indexes
+            .iter()
+            .map(|index| &self.fields[*index as usize])
+            .collect()
+    }
+
+    pub fn indexes_idx(&self) -> &[u16] {
+        &self.indexes
+    }
 }
