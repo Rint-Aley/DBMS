@@ -1,6 +1,8 @@
 pub mod structures;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fmt::format;
+use std::fs::OpenOptions;
 use std::fs::{self, File, metadata};
 use std::hash::Hash;
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -16,7 +18,11 @@ const NUMBER_OF_PAGES_FILE_NAME: &str = "number";
 const INDEXES_DIRECTORY_NAME: &str = "indexes";
 const PAGE_SIZE_BYTES: u16 = 4096;
 
-pub fn create_table(database_path: &str, name: &str, metadata: TableMetadata) {
+pub fn create_table(
+    database_path: &str,
+    name: &str,
+    metadata: TableMetadata,
+) -> Result<(), String> {
     let table_directory = Path::new(database_path).join(name);
     if let Err(e) = fs::create_dir_all(&table_directory) {
         dbg!(e);
@@ -43,30 +49,52 @@ pub fn create_table(database_path: &str, name: &str, metadata: TableMetadata) {
     let indexes_dir = table_directory.join(INDEXES_DIRECTORY_NAME);
     fs::create_dir(&indexes_dir).unwrap();
     for field in metadata.fields() {
-        let mut index_file = File::create(indexes_dir.join(&field.name)).unwrap();
         let map: BTreeMap<Type, Vec<DataPosition>> = BTreeMap::new();
-        let config = bincode::config::standard().with_little_endian();
-        bincode::encode_into_std_write(map, &mut index_file, config).unwrap();
+        write_index(&indexes_dir.join(&field.name), &map)?;
+        // if write_index will not create a new file then uncomment following code
+        //let mut index_file = File::create(indexes_dir.join(&field.name)).unwrap();
+        //let config = bincode::config::standard().with_little_endian();
+        //bincode::encode_into_std_write(map, &mut index_file, config).unwrap();
     }
+    Ok(())
 }
 
 pub fn clear_table(table_path: &Path) -> Result<(), String> {
-    // let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
-    // let num_of_pages_path = table_path.join(NUMBER_OF_PAGES_FILE_NAME);
-    // match fs::read_dir(pages_dir) {
-    //     Ok(entries) => {
-    //         for entry in entries {
-    //             if let Ok(file) = entry {
-    //                 fs::remove_file(file.path());
-    //             }
-    //         }
-    //         Ok(())
-    //     }
-    //     Err(e) => Err(e.to_string()),
-    // }
+    let free_space_path = table_path.join(FREE_SPACE_FILE_NAME);
+    let metadata_path = table_path.join(DESCRIPTION_FILE_NAME);
+    let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
 
-    // delete all pages but the first, update number of pages, update free space
-    unimplemented!()
+    let raw_data = match fs::read(metadata_path) {
+        Ok(data) => data,
+        Err(e) => {
+            return Err(format!("Error while reading table metadata: {}", e));
+        }
+    };
+    let metadata = TableMetadata::deserialize(&raw_data)?;
+
+    let number_of_pages: u64 = read_number_of_pages(table_path)?;
+    for i in 1..number_of_pages {
+        let file_path = pages_dir.join(i.to_string());
+        if let Err(e) = fs::remove_file(&file_path)
+            && e.kind() == io::ErrorKind::PermissionDenied
+        {
+            return Err(format!(
+                "Error while deleting page {}: permission denied",
+                file_path.display()
+            ));
+        }
+    }
+    write_number_of_pages(table_path, 1)?;
+    let number_of_cells_per_page = PAGE_SIZE_BYTES / metadata.record_size();
+    if let Err(e) = fs::write(
+        free_space_path,
+        FreeSpace::new(0, 0, number_of_cells_per_page)
+            .unwrap()
+            .serialize(),
+    ) {
+        return Err(format!("Error while writing to free space file: {}", e));
+    };
+    Ok(())
 }
 
 pub fn delete_table(table_path: &Path) -> Result<(), String> {
@@ -76,17 +104,19 @@ pub fn delete_table(table_path: &Path) -> Result<(), String> {
     }
 }
 
+// Not the primary concern for now
 pub fn add_index() {
     unimplemented!()
 }
 
+// Not the primary concern for now
 pub fn delete_index() {
     unimplemented!()
 }
 
-pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), &'static str> {
+pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), String> {
     if !is_table_exists(table_path) {
-        return Err("Table is corrupted or does not exist.");
+        return Err(String::from("Table is corrupted or does not exist."));
     }
 
     let table_path = Path::new(table_path);
@@ -97,12 +127,28 @@ pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), &'static
     let raw_data = fs::read(table_path.join(DESCRIPTION_FILE_NAME)).unwrap();
     let table_metadata = TableMetadata::deserialize(&raw_data).unwrap();
 
-    // TODO: validate 'values' vector and CHECK FOR PRIMARY KEY UNIQUENESS
+    // TODO: validate 'values' vector
     // if records
     //     .iter()
     //     .all(|record| record.len() as u16 == table_metadata.record_size())
     // {}
     //values.iter().all(|record| record.iter().all(|value| value.type_id() == table_metadata.));
+
+    // Check new records for primary key uniqueness
+    // TODO: check for pk duplicates in the new ones
+    let pk_idx = table_metadata.primary_key() as usize;
+    let pk_field = &table_metadata.fields()[pk_idx];
+    let pk_index_path = indexes_dir.join(&pk_field.name);
+    let pk_index = read_index(&pk_index_path)?;
+    let all_records_unique = records
+        .iter()
+        .all(|&record| match pk_index.get(&record[pk_idx]) {
+            Some(data) => data.is_empty(),
+            None => true,
+        });
+    if !all_records_unique {
+        return Err(String::from("Error: new records break the pk uniqueness."));
+    }
 
     let raw_data = fs::read(&free_space_path).unwrap();
     let mut free_space_data = FreeSpace::deserialize_multiple(&raw_data).unwrap();
@@ -175,19 +221,22 @@ pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), &'static
 
     // Updating indexes
     let fields = table_metadata.fields();
-    let config = bincode::config::standard().with_little_endian();
+    //let config = bincode::config::standard().with_little_endian();
     for &index_idx in table_metadata.indexes_idx() {
         let index_name = &fields[index_idx as usize].name;
-        let mut index_file = File::open(indexes_dir.join(index_name)).unwrap();
-        let mut index_map: BTreeMap<Type, Vec<DataPosition>> =
-            bincode::decode_from_std_read(&mut index_file, config).unwrap();
+        // let mut index_file = File::open(indexes_dir.join(index_name)).unwrap();
+        // let mut index_map: BTreeMap<Type, Vec<DataPosition>> =
+        //     bincode::decode_from_std_read(&mut index_file, config).unwrap();
+        let index_path = indexes_dir.join(index_name);
+        let mut index_map = read_index(&index_path)?;
         for (i, &record) in records.iter().enumerate() {
             index_map
                 .entry(record[index_idx as usize].clone())
                 .or_insert_with(Vec::new)
                 .push(records_position.get(&i).unwrap().clone());
         }
-        bincode::encode_into_std_write(index_map, &mut index_file, config).unwrap();
+        // bincode::encode_into_std_write(index_map, &mut index_file, config).unwrap();
+        write_index(&index_path, &index_map).unwrap();
     }
     Ok(())
 }
@@ -213,10 +262,59 @@ pub fn get_records(
     )
 }
 
-fn get_positions(
-    table_path: &Path,
-    filters: &[FilterOption],
-) -> Result<Vec<DataPosition>, &'static str> {
+pub fn delete_records(table_path: &Path, filters: &[FilterOption]) -> Result<(), String> {
+    let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
+    let metadata_path = table_path.join(DESCRIPTION_FILE_NAME);
+
+    let raw_metadata_content = fs::read(metadata_path).unwrap();
+    let metadata = TableMetadata::deserialize(&raw_metadata_content)?;
+
+    let record_positions = get_positions(&table_path, filters)?;
+    let record_positions_set: HashSet<DataPosition> =
+        record_positions.clone().into_iter().collect();
+    if record_positions.is_empty() {
+        return Ok(());
+    }
+
+    // Delete indexes
+    let fields = metadata.fields();
+    let records_structure: Vec<Type> = fields.iter().map(|filed| filed.type_.clone()).collect();
+    let record_size = records_structure
+        .iter()
+        .map(|field| field.size() as u16)
+        .sum();
+    let records = get_records_by_position(
+        table_path,
+        &record_positions,
+        &records_structure,
+        record_size,
+    )
+    .unwrap();
+
+    for &index_idx in metadata.indexes_idx() {
+        let index_idx = index_idx as usize;
+        let values_range: BTreeSet<&Type> =
+            records.iter().map(|record| &record[index_idx]).collect();
+        let index_path = pages_dir.join(&fields[index_idx].name);
+        let mut index = read_index(&index_path)?;
+        for value in values_range {
+            if let Some(positions) = index.get_mut(value) {
+                positions.retain(|position| !record_positions_set.contains(position));
+            }
+        }
+        write_index(&index_path, &index)?;
+    }
+    delete_records_by_position(table_path, &record_positions)
+}
+
+pub fn change_records() {
+    // find records according to a filter
+    // changed values
+    // check for uniquenes in pk is changed
+    unimplemented!()
+}
+
+fn get_positions(table_path: &Path, filters: &[FilterOption]) -> Result<Vec<DataPosition>, String> {
     let indexes_dir = table_path.join(INDEXES_DIRECTORY_NAME);
     let descriptor = table_path.join(DESCRIPTION_FILE_NAME);
     let metadata = TableMetadata::deserialize(&fs::read(descriptor).unwrap()).unwrap();
@@ -258,12 +356,9 @@ fn get_positions(
             .into_iter()
             .collect();
     }
-    let config = bincode::config::standard().with_little_endian();
     for filter in indexed_filters {
         let index_path = indexes_dir.join(&filter.field().name);
-        let mut index_file = File::open(&index_path).unwrap();
-        let index: BTreeMap<Type, Vec<DataPosition>> =
-            bincode::decode_from_std_read(&mut index_file, config).unwrap();
+        let index = read_index(&index_path)?;
         match filter.filter() {
             Filter::Equal => {
                 match index.get(&filter.field().type_) {
@@ -287,20 +382,6 @@ fn get_positions(
     }
 
     Ok(positions.into_iter().collect())
-}
-
-pub fn delete_records() {
-    // find records according to a filter
-    // delete it from indexes
-    // delte records at these positions
-    unimplemented!()
-}
-
-pub fn change_records() {
-    // find records according to a filter
-    // changed values
-    // check for uniquenes in pk is changed
-    unimplemented!()
 }
 
 fn get_records_by_position(
@@ -386,7 +467,7 @@ fn linear_search(
 fn get_all_positions(
     table_path: &Path,
     metadata: &TableMetadata,
-) -> Result<Vec<DataPosition>, &'static str> {
+) -> Result<Vec<DataPosition>, String> {
     let free_space_path = table_path.join(FREE_SPACE_FILE_NAME);
     let num_of_pages = read_number_of_pages(table_path).unwrap();
     let record_size = metadata.record_size();
@@ -430,17 +511,13 @@ fn get_all_positions(
     Ok(positions)
 }
 
-fn delete_records_by_position(
-    table_path: &str,
-    positions: &[DataPosition],
-) -> Result<(), &'static str> {
+fn delete_records_by_position(table_path: &Path, positions: &[DataPosition]) -> Result<(), String> {
     // TODO: deleting page when it depletes (rename last page and update number of pages)
     if positions.is_empty() {
         return Ok(());
     }
 
-    let table_dir = Path::new(table_path);
-    let free_space_path = table_dir.join(FREE_SPACE_FILE_NAME);
+    let free_space_path = table_path.join(FREE_SPACE_FILE_NAME);
     let mut current_free_cells =
         FreeSpace::deserialize_multiple(&fs::read(&free_space_path).unwrap()).unwrap();
     let mut new_free_cells: Vec<FreeSpace> = Vec::new();
@@ -491,6 +568,47 @@ fn write_number_of_pages(database_path: &Path, value: u64) -> Result<(), &'stati
     Ok(())
 }
 
+fn write_index(
+    index_path: &Path,
+    index_data: &BTreeMap<Type, Vec<DataPosition>>,
+) -> Result<(), String> {
+    let config = bincode::config::standard().with_little_endian();
+    let open_options = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(index_path);
+    let mut index_file = match open_options {
+        Ok(file) => file,
+        Err(_) => {
+            return Err(format!(
+                "Index file at {} is not accessable.",
+                index_path.display()
+            ));
+        }
+    };
+    match bincode::encode_into_std_write(index_data, &mut index_file, config) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Error while encoding index: {}", e)),
+    }
+}
+
+fn read_index(index_path: &Path) -> Result<BTreeMap<Type, Vec<DataPosition>>, String> {
+    let config: bincode::config::Configuration = bincode::config::standard().with_little_endian();
+    let mut index_file = match File::open(index_path) {
+        Ok(file) => file,
+        Err(_) => {
+            return Err(format!(
+                "Index file at {} is not accessable.",
+                index_path.display()
+            ));
+        }
+    };
+    match bincode::decode_from_std_read(&mut index_file, config) {
+        Ok(map) => Ok(map),
+        Err(e) => Err(format!("Error while decoding index: {}", e)),
+    }
+}
 // Checks that overall table structure is valid
 fn is_table_exists(table_path: &str) -> bool {
     let table_dir = Path::new(table_path);

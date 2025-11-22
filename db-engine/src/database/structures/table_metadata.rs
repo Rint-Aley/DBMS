@@ -35,7 +35,7 @@ impl TableMetadata {
         })
     }
 
-    pub fn deserialize(data: &[u8]) -> Result<Self, &str> {
+    pub fn deserialize(data: &[u8]) -> Result<Self, &'static str> {
         let mut rdr = Cursor::new(data);
 
         let field_count = rdr
