@@ -1,15 +1,13 @@
 pub mod structures;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fmt::format;
 use std::fs::OpenOptions;
-use std::fs::{self, File, metadata};
-use std::hash::Hash;
+use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use structures::*;
 
-use crate::database;
+use crate::grpc_server::table_api::value;
 
 const DESCRIPTION_FILE_NAME: &str = "descriptor";
 const FREE_SPACE_FILE_NAME: &str = "free_space";
@@ -61,16 +59,9 @@ pub fn create_table(
 
 pub fn clear_table(table_path: &Path) -> Result<(), String> {
     let free_space_path = table_path.join(FREE_SPACE_FILE_NAME);
-    let metadata_path = table_path.join(DESCRIPTION_FILE_NAME);
     let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
 
-    let raw_data = match fs::read(metadata_path) {
-        Ok(data) => data,
-        Err(e) => {
-            return Err(format!("Error while reading table metadata: {}", e));
-        }
-    };
-    let metadata = TableMetadata::deserialize(&raw_data)?;
+    let metadata = get_table_metadata(table_path)?;
 
     let number_of_pages: u64 = read_number_of_pages(table_path)?;
     for i in 1..number_of_pages {
@@ -114,18 +105,12 @@ pub fn delete_index() {
     unimplemented!()
 }
 
-pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), String> {
-    if !is_table_exists(table_path) {
-        return Err(String::from("Table is corrupted or does not exist."));
-    }
-
-    let table_path = Path::new(table_path);
+pub fn add_records(table_path: &Path, records: &[&[Type]]) -> Result<(), String> {
     let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
     let indexes_dir = table_path.join(INDEXES_DIRECTORY_NAME);
     let free_space_path = table_path.join(FREE_SPACE_FILE_NAME);
 
-    let raw_data = fs::read(table_path.join(DESCRIPTION_FILE_NAME)).unwrap();
-    let table_metadata = TableMetadata::deserialize(&raw_data).unwrap();
+    let table_metadata = get_table_metadata(table_path)?;
 
     // TODO: validate 'values' vector
     // if records
@@ -241,13 +226,8 @@ pub fn add_records(table_path: &str, records: &[&[Type]]) -> Result<(), String> 
     Ok(())
 }
 
-pub fn get_records(
-    table_path: &Path,
-    filters: &[FilterOption],
-) -> Result<Vec<Vec<Type>>, &'static str> {
-    let descriptor = Path::new(table_path).join(DESCRIPTION_FILE_NAME);
-    let metadata: TableMetadata =
-        TableMetadata::deserialize(&fs::read(descriptor).unwrap()).unwrap();
+pub fn get_records(table_path: &Path, filters: &[FilterOption]) -> Result<Vec<Vec<Type>>, String> {
+    let metadata = get_table_metadata(table_path)?;
     let positions = get_positions(table_path, filters).unwrap();
     let db_structure: Vec<Type> = metadata
         .fields()
@@ -264,12 +244,10 @@ pub fn get_records(
 
 pub fn delete_records(table_path: &Path, filters: &[FilterOption]) -> Result<(), String> {
     let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
-    let metadata_path = table_path.join(DESCRIPTION_FILE_NAME);
 
-    let raw_metadata_content = fs::read(metadata_path).unwrap();
-    let metadata = TableMetadata::deserialize(&raw_metadata_content)?;
+    let metadata = get_table_metadata(table_path)?;
 
-    let record_positions = get_positions(&table_path, filters)?;
+    let record_positions = get_positions(table_path, filters)?;
     let record_positions_set: HashSet<DataPosition> =
         record_positions.clone().into_iter().collect();
     if record_positions.is_empty() {
@@ -307,17 +285,124 @@ pub fn delete_records(table_path: &Path, filters: &[FilterOption]) -> Result<(),
     delete_records_by_position(table_path, &record_positions)
 }
 
-pub fn change_records() {
-    // find records according to a filter
-    // changed values
-    // check for uniquenes in pk is changed
-    unimplemented!()
+pub fn change_records(
+    table_path: &Path,
+    filters: &[FilterOption],
+    structure: Vec<Field>,
+    values: Vec<Type>,
+) -> Result<(), String> {
+    if values.len() != structure.len() {
+        return Err(format!(
+            "Structure of element to change and their values have different length: structure {}; values {}",
+            structure.len(),
+            values.len()
+        ));
+    }
+
+    let indexes_dir = table_path.join(INDEXES_DIRECTORY_NAME);
+    let metadata = get_table_metadata(table_path)?;
+    let fileds_map: HashMap<&String, usize> = metadata
+        .fields()
+        .iter()
+        .enumerate()
+        .map(|(idx, field)| (&field.name, idx))
+        .collect();
+    let field_name_to_value_map: HashMap<String, Type> = structure
+        .iter()
+        .zip(values.iter())
+        .map(|(field, value)| (field.name.clone(), value.clone()))
+        .collect();
+
+    // Validating request and converting to appropriate data structure
+    let mut index_value = Vec::with_capacity(structure.len());
+    for (field_to_change, value) in structure.iter().zip(values.into_iter()) {
+        match fileds_map.get(&field_to_change.name) {
+            Some(&idx) => {
+                // For now, changing primary key is not allowed. This behaviour is likely to change in the future
+                if idx == metadata.primary_key() as usize {
+                    return Err(String::from("Cannot change primary key field"));
+                }
+                index_value.push((idx, value))
+            }
+            None => {
+                return Err(format!(
+                    "Attempted to change a field that doesn't exist in the record scheme: {}",
+                    field_to_change.name,
+                ));
+            }
+        }
+    }
+
+    let indexed_fields_hash_set: HashSet<&String> = metadata
+        .indexes()
+        .iter()
+        .map(|&field| &field.name)
+        .collect();
+    let filtered_fields_hash_set: HashSet<&String> =
+        structure.iter().map(|field| &field.name).collect();
+
+    let indexes_to_update: Vec<&String> = (&indexed_fields_hash_set & &filtered_fields_hash_set)
+        .into_iter()
+        .collect();
+
+    let old_values_positions = indexes_to_update
+        .iter()
+        .filter_map(|&field| fileds_map.get(field).copied())
+        .collect();
+
+    let records_positions = get_positions(table_path, filters)?;
+    let old_values = change_records_by_position(
+        table_path,
+        &metadata,
+        records_positions,
+        index_value,
+        old_values_positions,
+    )?;
+
+    // Update indexes
+    for (&index_name, (positions_of_changed_records, old_values)) in
+        indexes_to_update.iter().zip(old_values)
+    {
+        let index_path = indexes_dir.join(index_name);
+        let mut index = read_index(&index_path)?;
+        for value in old_values {
+            if let Some(indexed_positions) = index.get_mut(&value) {
+                indexed_positions.retain(|pos| !positions_of_changed_records.contains(pos));
+            }
+        }
+        let new_value = field_name_to_value_map.get(index_name).unwrap();
+        match index.get_mut(new_value) {
+            Some(indexed_positions) => {
+                indexed_positions.append(&mut positions_of_changed_records.into_iter().collect());
+            }
+            None => {
+                index.insert(
+                    new_value.clone(),
+                    positions_of_changed_records.into_iter().collect(),
+                );
+            }
+        }
+        write_index(&index_path, &index)?;
+    }
+
+    Ok(())
+}
+
+fn get_table_metadata(table_path: &Path) -> Result<TableMetadata, String> {
+    let metadata_path = table_path.join(DESCRIPTION_FILE_NAME);
+    let raw_data: Vec<u8> = match fs::read(metadata_path) {
+        Ok(data) => data,
+        Err(e) => return Err(format!("Error while reading table metadata: {}", e)),
+    };
+    match TableMetadata::deserialize(&raw_data) {
+        Ok(metadata) => Ok(metadata),
+        Err(e) => Err(format!("Error while parsing table metadata: {}", e)),
+    }
 }
 
 fn get_positions(table_path: &Path, filters: &[FilterOption]) -> Result<Vec<DataPosition>, String> {
     let indexes_dir = table_path.join(INDEXES_DIRECTORY_NAME);
-    let descriptor = table_path.join(DESCRIPTION_FILE_NAME);
-    let metadata = TableMetadata::deserialize(&fs::read(descriptor).unwrap()).unwrap();
+    let metadata = get_table_metadata(table_path)?;
 
     if filters.is_empty() {
         return get_all_positions(table_path, &metadata);
@@ -389,7 +474,7 @@ fn get_records_by_position(
     positions: &[DataPosition],
     record_structure: &[Type],
     record_size: u16,
-) -> Result<Vec<Vec<Type>>, &'static str> {
+) -> Result<Vec<Vec<Type>>, String> {
     if positions.is_empty() {
         return Ok(Vec::new());
     }
@@ -399,14 +484,14 @@ fn get_records_by_position(
     positions.sort_by_key(|position| (position.page, position.cell));
 
     let mut current_page_idx = positions[0].page;
-    let page_path = page_dir.join(positions[0].page.to_string());
+    let page_path = page_dir.join(current_page_idx.to_string());
     let mut current_page = File::open(page_path).unwrap();
     let mut values = Vec::with_capacity(positions.len());
     for position in positions {
         if position.page != current_page_idx {
-            let page_path = page_dir.join(position.page.to_string());
-            current_page = File::open(page_path).unwrap();
             current_page_idx = position.page;
+            let page_path = page_dir.join(current_page_idx.to_string());
+            current_page = File::open(page_path).unwrap();
         }
         current_page
             .seek(SeekFrom::Start(position.cell as u64))
@@ -554,6 +639,81 @@ fn delete_records_by_position(table_path: &Path, positions: &[DataPosition]) -> 
     )
     .unwrap();
     Ok(())
+}
+
+/// Changes records by given positions and returns range of old values to use for indexing
+fn change_records_by_position(
+    table_path: &Path,
+    metadata: &TableMetadata,
+    mut positions: Vec<DataPosition>,
+    values: Vec<(usize, Type)>,
+    old_values_positions: Vec<usize>,
+) -> Result<Vec<(HashSet<DataPosition>, BTreeSet<Type>)>, String> {
+    if positions.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut old_values: Vec<(HashSet<DataPosition>, BTreeSet<Type>)> =
+        vec![(HashSet::new(), BTreeSet::new()); old_values_positions.len()];
+    let page_dir = table_path.join(PAGES_DIRECTORY_NAME);
+    let record_size = metadata.record_size() as usize;
+    let record_structure: Vec<Type> = metadata
+        .fields()
+        .iter()
+        .map(|field| field.type_.clone())
+        .collect();
+    let update_record_unchecked = |record: &mut Vec<Type>| {
+        for (idx, value) in &values {
+            record[*idx] = value.clone();
+        }
+    };
+    let mut record_old_values = |record: &[Type], position: &DataPosition| {
+        for (old_values_idx, record_idx) in old_values_positions.iter().enumerate() {
+            if let Some((positions, values)) = old_values.get_mut(old_values_idx) {
+                positions.insert(position.clone());
+                values.insert(record[*record_idx].clone());
+            }
+        }
+    };
+    let mut buffer = vec![0u8; record_size];
+
+    positions.sort_by_key(|position| (position.page, position.cell));
+
+    let mut page_num = positions[0].page;
+    let page_path = page_dir.join(page_num.to_string());
+    let mut page_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(page_path)
+        .unwrap();
+    for position in positions {
+        if position.page != page_num {
+            page_num = position.page;
+            let page_path = page_dir.join(page_num.to_string());
+            page_file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(page_path)
+                .unwrap();
+        }
+        page_file
+            .seek(SeekFrom::Start(position.cell as u64))
+            .unwrap();
+        page_file.read_exact(&mut buffer).unwrap();
+
+        let mut record = structures::dbtype::deserialize_value(&buffer, &record_structure)?;
+
+        record_old_values(&record, &position);
+        update_record_unchecked(&mut record);
+
+        page_file
+            .seek(SeekFrom::Start(position.cell as u64))
+            .unwrap();
+        page_file
+            .write_all(&structures::dbtype::serialize_values(&record))
+            .unwrap();
+    }
+    Ok(old_values)
 }
 
 fn read_number_of_pages(database_path: &Path) -> Result<u64, &'static str> {
