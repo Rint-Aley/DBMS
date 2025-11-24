@@ -3,7 +3,7 @@ package table_api;
 
 service TableService {
   rpc GetTableList(Void) returns (TableList);
-  //rpc CreateTable(Table) returns (Void);
+  rpc CreateTable(TableMetadata) returns (Void);
   rpc DropTable(Table) returns (Void);
   rpc DeleteTable(Table) returns (Void);
   
@@ -38,10 +38,10 @@ enum Type {
   u32 = 11;
 }
 
-enum Order {
-  ascending = 0;
-  descending = 1;
-}
+// enum Order {
+//   ascending = 0;
+//   descending = 1;
+// }
 
 enum Filter {
   equal = 0;
@@ -65,29 +65,43 @@ message TableList {
 message Field {
   string name = 1;
   Type type = 2;
-  bool nullable = 3;
+  // bool nullable = 3;
 }
 
-message PrimaryKey {
-  repeated Field pk = 1;
+message TableMetadata {
+  string name = 1;
+  repeated Field fields = 2;
+  int32 primary_key = 3;
+  repeated int32 indexes = 4;
 }
+
+// message PrimaryKey {
+//   repeated Field pk = 1;
+// }
 
 message FilterOption {
   Field column = 1;
   Filter filter = 2;
 }
 
-message OrderOption {
-  Field column = 1;
-  Order order = 2;
-}
+// message OrderOption {
+//   Field column = 1;
+//   Order order = 2;
+// }
 
 message Value {
   oneof kind {
-    string string_value = 1;
-    int64 int_value = 2;
-    double double_value = 3;
-    bool bool_value = 4;
+    uint32 u8 = 1;
+    uint32 u16 = 2;
+    uint32 u32 = 3;
+    uint64 u64 = 4;
+    int32 i8 = 5;
+    int32 i16 = 6;
+    int32 i32 = 7;
+    int64 i64 = 8;
+    bool bool = 9;
+    float f32 = 10;
+    double f64 = 11;
   }
 }
 
@@ -110,7 +124,7 @@ message SelectRequest {
   Table table = 1;
   repeated Field pattern = 2;
   repeated FilterOption filters = 3;
-  repeated OrderOption order_options = 4;
+  // repeated OrderOption order_options = 4;
 }
 
 message DeleteRequest {

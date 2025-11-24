@@ -7,8 +7,6 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use structures::*;
 
-use crate::grpc_server::table_api::value;
-
 const DESCRIPTION_FILE_NAME: &str = "descriptor";
 const FREE_SPACE_FILE_NAME: &str = "free_space";
 const PAGES_DIRECTORY_NAME: &str = "pages";
@@ -16,12 +14,37 @@ const NUMBER_OF_PAGES_FILE_NAME: &str = "number";
 const INDEXES_DIRECTORY_NAME: &str = "indexes";
 const PAGE_SIZE_BYTES: u16 = 4096;
 
+pub fn get_table_list(database_path: &Path) -> Result<Vec<String>, String> {
+    let database_directory = match fs::read_dir(database_path) {
+        Ok(dir) => dir,
+        Err(e) => {
+            return Ok(Vec::new());
+        }
+    };
+    let mut tables: Vec<String> = Vec::new();
+    for entry in database_directory {
+        if let Ok(entry) = entry {
+            let path = entry.path();
+            if path.is_dir() && dir_is_table(&path) {
+                let dir_name = match entry.file_name().into_string() {
+                    Ok(name) => name,
+                    Err(_) => {
+                        return Err(String::from("Couldn't convers from OsString to String."));
+                    }
+                };
+                tables.push(dir_name);
+            }
+        }
+    }
+    Ok(tables)
+}
+
 pub fn create_table(
-    database_path: &str,
+    database_path: &Path,
     name: &str,
     metadata: TableMetadata,
 ) -> Result<(), String> {
-    let table_directory = Path::new(database_path).join(name);
+    let table_directory = database_path.join(name);
     if let Err(e) = fs::create_dir_all(&table_directory) {
         dbg!(e);
     };
@@ -770,7 +793,7 @@ fn read_index(index_path: &Path) -> Result<BTreeMap<Type, Vec<DataPosition>>, St
     }
 }
 // Checks that overall table structure is valid
-fn is_table_exists(table_path: &str) -> bool {
+fn dir_is_table(table_path: &Path) -> bool {
     let table_dir = Path::new(table_path);
     let descriptor = table_dir.join(DESCRIPTION_FILE_NAME);
     let free_space = table_dir.join(FREE_SPACE_FILE_NAME);
