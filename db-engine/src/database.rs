@@ -128,7 +128,7 @@ pub fn delete_index() {
     unimplemented!()
 }
 
-pub fn add_records(table_path: &Path, records: &[&[Type]]) -> Result<(), String> {
+pub fn add_records(table_path: &Path, records: Vec<Vec<Type>>) -> Result<(), String> {
     let pages_dir = table_path.join(PAGES_DIRECTORY_NAME);
     let indexes_dir = table_path.join(INDEXES_DIRECTORY_NAME);
     let free_space_path = table_path.join(FREE_SPACE_FILE_NAME);
@@ -150,7 +150,7 @@ pub fn add_records(table_path: &Path, records: &[&[Type]]) -> Result<(), String>
     let pk_index = read_index(&pk_index_path)?;
     let all_records_unique = records
         .iter()
-        .all(|&record| match pk_index.get(&record[pk_idx]) {
+        .all(|record| match pk_index.get(&record[pk_idx]) {
             Some(data) => data.is_empty(),
             None => true,
         });
@@ -200,7 +200,7 @@ pub fn add_records(table_path: &Path, records: &[&[Type]]) -> Result<(), String>
         let mut record_position = free_position_begining;
         for i in 0..records_to_add as usize {
             page.write_all(&structures::dbtype::serialize_values(
-                records[current_record + i],
+                &records[current_record + i],
             ))
             .unwrap();
             records_position.insert(
@@ -237,7 +237,7 @@ pub fn add_records(table_path: &Path, records: &[&[Type]]) -> Result<(), String>
         //     bincode::decode_from_std_read(&mut index_file, config).unwrap();
         let index_path = indexes_dir.join(index_name);
         let mut index_map = read_index(&index_path)?;
-        for (i, &record) in records.iter().enumerate() {
+        for (i, record) in records.iter().enumerate() {
             index_map
                 .entry(record[index_idx as usize].clone())
                 .or_insert_with(Vec::new)

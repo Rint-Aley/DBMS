@@ -1,5 +1,5 @@
 use crate::database::structures::{self as db, Field};
-use crate::grpc_server::table_api::{self as proto, value};
+use crate::grpc_server::table_api::{self as proto, RecordsInfo, value};
 use proto::value::Kind as val;
 
 impl From<proto::Type> for db::Type {
@@ -87,6 +87,26 @@ impl From<Vec<Vec<db::Type>>> for proto::RecordsInfo {
     fn from(value: Vec<Vec<db::Type>>) -> Self {
         let records = value.into_iter().map(|record| record.into()).collect();
         proto::RecordsInfo { records }
+    }
+}
+
+impl From<proto::ValueSequence> for Vec<db::Type> {
+    fn from(value: proto::ValueSequence) -> Self {
+        value
+            .sequence
+            .into_iter()
+            .map(|value| value.try_into().unwrap())
+            .collect()
+    }
+}
+
+impl From<proto::RecordsInfo> for Vec<Vec<db::Type>> {
+    fn from(value: proto::RecordsInfo) -> Self {
+        value
+            .records
+            .into_iter()
+            .map(|record| record.into())
+            .collect()
     }
 }
 

@@ -1,4 +1,6 @@
 use crate::database::structures::{self, filters};
+use crate::database::{add_records, change_records};
+use crate::grpc_server::table_api::value;
 
 use super::database;
 use std::path::PathBuf;
@@ -44,7 +46,7 @@ impl MyTableService {
 
 #[tonic::async_trait]
 impl TableService for MyTableService {
-    async fn get_table_list(&self, request: Request<Void>) -> Result<Response<TableList>, Status> {
+    async fn get_table_list(&self, _: Request<Void>) -> Result<Response<TableList>, Status> {
         let table_names = match database::get_table_list(&self.database_path) {
             Ok(names) => names,
             Err(error_details) => {
@@ -142,7 +144,11 @@ impl TableService for MyTableService {
         let request = request.into_inner();
         let table_name = request.table.unwrap().name;
         let table_path = self.database_path.join(table_name);
-        unimplemented!()
+        let records: Vec<Vec<database::structures::Type>> = request.records.unwrap().into();
+        match add_records(&table_path, records) {
+            Ok(_) => Ok(Response::new(Void {})),
+            Err(error_details) => Err(Status::new(tonic::Code::Aborted, error_details)),
+        }
     }
 
     async fn delete_records(
@@ -169,8 +175,36 @@ impl TableService for MyTableService {
         request: Request<ChangeRequest>,
     ) -> Result<Response<Void>, Status> {
         let request = request.into_inner();
+
         let table_name = request.table.unwrap().name;
         let table_path = self.database_path.join(table_name);
-        unimplemented!()
+
+        let filters: Vec<database::structures::FilterOption> = request
+            .filters
+            .into_iter()
+            .map(|filter_option| filter_option.try_into().unwrap())
+            .collect();
+
+        let structure = request
+            .pattern
+            .into_iter()
+            .map(|field| field.into())
+            .collect();
+
+        let values = match request.new_values {
+            Some(value) => value,
+            None => {
+                return Err(Status::new(
+                    tonic::Code::InvalidArgument,
+                    "Values for 'change records' operation wasn't specified.",
+                ));
+            }
+        }
+        .into();
+
+        match change_records(&table_path, &filters, structure, values) {
+            Ok(_) => Ok(Response::new(Void {})),
+            Err(error_details) => Err(Status::new(tonic::Code::Aborted, error_details)),
+        }
     }
 }

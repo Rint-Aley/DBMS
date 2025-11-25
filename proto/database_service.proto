@@ -114,7 +114,7 @@ message DeleteRequest {
 message ChangeRequest {
   Table table = 1;
   repeated Field pattern = 2;
-  repeated ValueSequence new_values = 3;
+  ValueSequence new_values = 3;
   repeated FilterOption filters = 4;
 }
 
