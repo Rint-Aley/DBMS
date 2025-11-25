@@ -1,0 +1,4 @@
+.vs
+db-client/bin
+db-client/obj
+db-client/db-client.csproj.user

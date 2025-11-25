@@ -1,0 +1,65 @@
+﻿<Window x:Class="db_client.QueryWindows.ChangeRecords"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:db_client.QueryWindows"
+        mc:Ignorable="d"
+        Title="ChangeRecords" Height="450" Width="800">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Change Records" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+
+        <TextBlock Grid.Row="1" Text="Filters:" FontSize="14" FontWeight="Bold" Margin="0,0,0,5"/>
+
+        <DataGrid x:Name="FiltersDataGrid" Grid.Row="2" AutoGenerateColumns="False" 
+                  CanUserAddRows="True" CanUserDeleteRows="True" Margin="0,0,0,10">
+            <DataGrid.Columns>
+                <DataGridComboBoxColumn Header="Field" 
+                                      ItemsSource="{Binding AvailableFields}"
+                                      SelectedValueBinding="{Binding Field}" Width="150"/>
+                <DataGridComboBoxColumn Header="Comparison" 
+                                      ItemsSource="{Binding Comparisons}"
+                                      SelectedItemBinding="{Binding Comparison}" Width="100"/>
+                <DataGridTemplateColumn Header="Value" Width="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBox Text="{Binding Value}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <TextBlock Grid.Row="3" Text="Changes to Apply:" FontSize="14" FontWeight="Bold" Margin="0,0,0,5"/>
+
+        <DataGrid x:Name="ChangesDataGrid" Grid.Row="4" AutoGenerateColumns="False" 
+                  CanUserAddRows="True" CanUserDeleteRows="True" Margin="0,0,0,10">
+            <DataGrid.Columns>
+                <DataGridComboBoxColumn Header="Field" 
+                                      ItemsSource="{Binding AvailableFields}"
+                                      SelectedValueBinding="{Binding Field}" Width="150"/>
+                <DataGridTemplateColumn Header="New Value" Width="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBox Text="{Binding NewValue}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Center">
+            <Button x:Name="ApplyButton" Content="Apply Changes" Width="100" Height="30" Margin="5"/>
+            <Button x:Name="CancelButton" Content="Cancel" Width="80" Height="30" Margin="5"/>
+        </StackPanel>
+    </Grid>
+</Window>
