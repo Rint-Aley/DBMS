@@ -1,5 +1,5 @@
-use crate::database::structures::{self as db, Field};
-use crate::grpc_server::table_api::{self as proto, RecordsInfo, value};
+use crate::database::structures as db;
+use crate::grpc_server::table_api as proto;
 use proto::value::Kind as val;
 
 impl From<proto::Type> for db::Type {

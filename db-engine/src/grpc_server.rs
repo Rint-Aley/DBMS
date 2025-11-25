@@ -1,13 +1,12 @@
-use crate::database::structures::{self, filters};
+use crate::database::structures;
 use crate::database::{add_records, change_records};
-use crate::grpc_server::table_api::value;
 
 use super::database;
 use std::path::PathBuf;
 use table_api::table_service_server::TableService;
 use table_api::{
-    AddRequest, ChangeRequest, DeleteRequest, Field, Filter, FilterOption, RecordsInfo,
-    SelectRequest, Table, TableList, TableMetadata, Type, Value, ValueSequence, Void,
+    AddRequest, ChangeRequest, DeleteRequest, RecordsInfo, SelectRequest, Table, TableList,
+    TableMetadata, Void,
 };
 use tonic::{Request, Response, Status};
 
@@ -113,11 +112,11 @@ impl TableService for MyTableService {
         }
     }
 
-    async fn create_backup(&self, request: Request<Table>) -> Result<Response<Void>, Status> {
+    async fn create_backup(&self, _request: Request<Table>) -> Result<Response<Void>, Status> {
         unimplemented!()
     }
 
-    async fn export(&self, request: Request<Table>) -> Result<Response<Void>, Status> {
+    async fn export(&self, _request: Request<Table>) -> Result<Response<Void>, Status> {
         unimplemented!()
     }
 

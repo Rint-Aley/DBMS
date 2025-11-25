@@ -57,7 +57,7 @@ pub fn create_table(
 
     let free_space_path = table_directory.join(FREE_SPACE_FILE_NAME);
     let mut free_space = File::create(free_space_path).unwrap();
-    let free_cells_available = (PAGE_SIZE_BYTES as u16) / metadata.record_size();
+    let free_cells_available = PAGE_SIZE_BYTES / metadata.record_size();
     let free_cells = FreeSpace::new(0, 0, free_cells_available).unwrap();
     free_space.write_all(&free_cells.serialize()).unwrap();
 

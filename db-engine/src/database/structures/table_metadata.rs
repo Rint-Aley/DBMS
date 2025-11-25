@@ -1,6 +1,6 @@
 use super::Field;
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TableMetadata {

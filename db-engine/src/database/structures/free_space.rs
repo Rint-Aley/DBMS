@@ -27,7 +27,7 @@ impl FreeSpace {
     }
 
     pub fn deserialize_multiple(data: &[u8]) -> Result<Vec<Self>, &str> {
-        if data.len() % FREE_SPACE_SECTION_SIZE != 0 {
+        if !data.len().is_multiple_of(FREE_SPACE_SECTION_SIZE) {
             return Err("Data length must be a multiple of entry size");
         }
         let mut result = Vec::with_capacity(data.len() / FREE_SPACE_SECTION_SIZE);
