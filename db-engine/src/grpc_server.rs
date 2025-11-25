@@ -1,5 +1,4 @@
-use crate::database::get_table_list;
-use crate::database::structures;
+use crate::database::structures::{self, filters};
 
 use super::database;
 use std::path::PathBuf;
@@ -68,25 +67,11 @@ impl TableService for MyTableService {
     ) -> Result<Response<Void>, Status> {
         let table_info = request.into_inner();
         let table_name = table_info.name;
-        // let table_path = self.database_path.join(table_name);
         let fields = table_info
             .fields
             .into_iter()
             .map(|proto_field| {
-                let type_ = match proto_field.r#type() {
-                    Type::Bool => structures::Type::Boolean(false),
-                    Type::I8 => structures::Type::I8(0),
-                    Type::I16 => structures::Type::I16(0),
-                    Type::I32 => structures::Type::I32(0),
-                    Type::I64 => structures::Type::I64(0),
-                    Type::U8 => structures::Type::U8(0),
-                    Type::U16 => structures::Type::U16(0),
-                    Type::U32 => structures::Type::U32(0),
-                    Type::U64 => structures::Type::U64(0),
-                    Type::F32 => unimplemented!(),
-                    Type::F64 => unimplemented!(),
-                    Type::String => unimplemented!(),
-                };
+                let type_ = proto_field.r#type().into();
                 structures::Field {
                     name: proto_field.name,
                     type_,
@@ -139,11 +124,24 @@ impl TableService for MyTableService {
         request: Request<SelectRequest>,
     ) -> Result<Response<RecordsInfo>, Status> {
         let request = request.into_inner();
-        request.table;
-        unimplemented!()
+        let table_name = request.table.unwrap().name;
+        let table_path = self.database_path.join(table_name);
+        let filters: Vec<database::structures::FilterOption> = request
+            .filters
+            .into_iter()
+            .map(|filter_option| filter_option.try_into().unwrap())
+            .collect();
+
+        match database::get_records(&table_path, &filters) {
+            Ok(data) => Ok(Response::new(data.into())),
+            Err(error_details) => Err(Status::new(tonic::Code::Aborted, error_details)),
+        }
     }
 
     async fn add_records(&self, request: Request<AddRequest>) -> Result<Response<Void>, Status> {
+        let request = request.into_inner();
+        let table_name = request.table.unwrap().name;
+        let table_path = self.database_path.join(table_name);
         unimplemented!()
     }
 
@@ -151,13 +149,28 @@ impl TableService for MyTableService {
         &self,
         request: Request<DeleteRequest>,
     ) -> Result<Response<Void>, Status> {
-        unimplemented!()
+        let request = request.into_inner();
+        let table_name = request.table.unwrap().name;
+        let table_path = self.database_path.join(table_name);
+        let filters: Vec<database::structures::FilterOption> = request
+            .filters
+            .into_iter()
+            .map(|filter_option| filter_option.try_into().unwrap())
+            .collect();
+
+        match database::delete_records(&table_path, &filters) {
+            Ok(_) => Ok(Response::new(Void {})),
+            Err(error_details) => Err(Status::new(tonic::Code::Aborted, error_details)),
+        }
     }
 
     async fn change_records(
         &self,
         request: Request<ChangeRequest>,
     ) -> Result<Response<Void>, Status> {
+        let request = request.into_inner();
+        let table_name = request.table.unwrap().name;
+        let table_path = self.database_path.join(table_name);
         unimplemented!()
     }
 }

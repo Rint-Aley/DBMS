@@ -8,7 +8,6 @@ service TableService {
   rpc DeleteTable(Table) returns (Void);
   
   rpc CreateBackup(Table) returns (Void);
-  //rpc send_backup(Table) returns ();
   rpc Export(Table) returns (Void);
 
   //rpc AddColumn() returns (Void);
@@ -20,8 +19,6 @@ service TableService {
   rpc DeleteRecords(DeleteRequest) returns (Void);
   rpc ChangeRecords(ChangeRequest) returns (Void);
 }
-
-//enum ResponseStatus {}
 
 enum Type {
   string = 0;
@@ -37,11 +34,6 @@ enum Type {
   u16 = 10;
   u32 = 11;
 }
-
-// enum Order {
-//   ascending = 0;
-//   descending = 1;
-// }
 
 enum Filter {
   equal = 0;
@@ -65,7 +57,6 @@ message TableList {
 message Field {
   string name = 1;
   Type type = 2;
-  // bool nullable = 3;
 }
 
 message TableMetadata {
@@ -75,19 +66,10 @@ message TableMetadata {
   repeated int32 indexes = 4;
 }
 
-// message PrimaryKey {
-//   repeated Field pk = 1;
-// }
-
 message FilterOption {
   Field column = 1;
   Filter filter = 2;
 }
-
-// message OrderOption {
-//   Field column = 1;
-//   Order order = 2;
-// }
 
 message Value {
   oneof kind {
@@ -110,8 +92,7 @@ message ValueSequence {
 }
 
 message RecordsInfo {
-  repeated Field pattern = 1;
-  repeated ValueSequence records = 2;
+  repeated ValueSequence records = 1;
 }
 
 message AddRequest {
@@ -122,9 +103,7 @@ message AddRequest {
 // select limit filter order ?? group by, distinct
 message SelectRequest {
   Table table = 1;
-  repeated Field pattern = 2;
   repeated FilterOption filters = 3;
-  // repeated OrderOption order_options = 4;
 }
 
 message DeleteRequest {

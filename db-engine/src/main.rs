@@ -1,5 +1,6 @@
 mod database;
 mod grpc_server;
+mod protobuf_database_conversations;
 
 use grpc_server::table_api;
 use std::error::Error;

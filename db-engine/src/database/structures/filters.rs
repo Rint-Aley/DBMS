@@ -7,7 +7,7 @@ pub enum Filter {
     LessEq,
     GreaterEq,
     Contains,
-    StratsWith,
+    StartsWith,
     EndsWith,
 }
 
@@ -17,6 +17,11 @@ pub struct FilterOption {
 }
 
 impl FilterOption {
+    pub fn new(field: Field, filter: Filter) -> Result<Self, String> {
+        // TODO: add validation
+        Ok(FilterOption { field, filter })
+    }
+
     pub fn field(&self) -> &Field {
         &self.field
     }
