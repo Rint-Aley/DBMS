@@ -3,13 +3,13 @@
     public class Field
     {
         public string Name { get; private set; }
-        public FieldType type { get; private set; }
-        public bool IsPrimaryKey { get; private set; }
-        public bool IsIndexed { get; }
+        public FieldType Type { get; private set; }
+        public bool IsPrimaryKey { get; set; }
+        public bool IsIndexed { get; set; }
         public Field(string name, FieldType type, bool isIndexed = false, bool isPrimaryKey = false)
         {
             Name = name;
-            this.type = type;
+            Type = type;
             IsPrimaryKey = isPrimaryKey;
             IsIndexed = isIndexed;
         }

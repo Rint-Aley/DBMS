@@ -2,7 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 
-namespace db_client
+namespace db_client.MainWindowPages
 {
     /// <summary>
     /// Interaction logic for RecordManager.xaml
@@ -27,7 +27,7 @@ namespace db_client
             
             header = new List<string>(Table.Fields.Count);
             foreach (var field in Table.Fields)
-                header.Add($"{field.Name}\n{field.type}");
+                header.Add($"{field.Name}\n{field.Type}");
 
             records = [];
             //Records = [[1, 3], [2, 102]];

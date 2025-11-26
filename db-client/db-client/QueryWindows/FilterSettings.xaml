@@ -32,7 +32,7 @@
                                 Binding="{Binding field.Name}" />
 
                 <DataGridTextColumn Header="Type"
-                                Binding="{Binding field.type}" />
+                                Binding="{Binding field.Type}" />
 
                 <DataGridTextColumn Header="Value"
                                 Binding="{Binding value}" />

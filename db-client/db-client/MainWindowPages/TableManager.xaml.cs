@@ -2,7 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 
-namespace db_client
+namespace db_client.MainWindowPages
 {
     /// <summary>
     /// Interaction logic for TableManager.xaml
@@ -22,8 +22,11 @@ namespace db_client
         private void CreateTableButton_Click(object sender, RoutedEventArgs e)
         {
             var createTableWindow = new CreateTable();
-            createTableWindow.ShowDialog();
-            // TODO: get table info from `createTableWindow`, pass it to grpc, and update the list
+            if (createTableWindow.ShowDialog() == true)
+            {
+                Table table = createTableWindow.Result!;
+                // Call rpc
+            }
         }
 
         private void OpenTableButton_Click(object sender, RoutedEventArgs e)
@@ -37,19 +40,27 @@ namespace db_client
 
         private void DeleteTableButton_Click(object sender, RoutedEventArgs e)
         {
-            var selectedTable = TablesListView.SelectedItem;
-            // TODO: Delete table logic
-            TablesListView.Items.Remove(selectedTable);
+            if (TablesListView.SelectedItem is Table table)
+            {
+                // TODO: Call rpc
+                TablesListView.Items.Remove(table);
+            }
         }
 
         private void BackupButton_Click(object sender, RoutedEventArgs e)
         {
-
+            if (TablesListView.SelectedItem is Table table)
+            {
+                // TODO: Call rpc
+            }
         }
 
         private void ExportButton_Click(object sender, RoutedEventArgs e)
         {
-
+            if (TablesListView.SelectedItem is Table table)
+            {
+                // TODO: Call rpc
+            }
         }
     }
 }

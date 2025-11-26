@@ -3,8 +3,8 @@
     public class ChangeOption
     {
         public Field field { get; private set; }
-        public object value { get; private set; }
-        public ChangeOption(Field field, object value)
+        public string value { get; private set; }
+        public ChangeOption(Field field, string value)
         {
             this.field = field;
             this.value = value;

@@ -1,16 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
+﻿using System.Windows;
 
 namespace db_client.QueryWindows
 {
@@ -41,11 +29,13 @@ namespace db_client.QueryWindows
                 MessageBox.Show("Please select a field.");
                 return;
             }
-            
-            // TODO: add typing
-            object typedValue = ValueTextBox.Text;
+            if (ValueTextBox.Text.Length == 0)
+            {
+                MessageBox.Show("Please add value for filter.");
+                return;
+            }
 
-            Result = new FilterOption(selectedField, typedValue);
+            Result = new FilterOption(selectedField, ValueTextBox.Text);
 
             DialogResult = true;
             Close();

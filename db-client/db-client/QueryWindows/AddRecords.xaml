@@ -15,8 +15,6 @@
 
         <TextBlock Grid.Row="0" Text="Add New Records" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
 
-        <!--<DataGrid x:Name="RecordsDataGrid" Grid.Row="1" AutoGenerateColumns="True" 
-                  CanUserAddRows="True" CanUserDeleteRows="True" Margin="0,0,0,10"/>-->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel x:Name="FieldsPanel" />
         </ScrollViewer>
