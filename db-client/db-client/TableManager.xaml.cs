@@ -1,18 +1,6 @@
 ﻿using db_client.QueryWindows;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace db_client
 {
@@ -24,8 +12,11 @@ namespace db_client
         public TableManager()
         {
             InitializeComponent();
-            TablesListView.Items.Add(new Table("Some table", [new Field("id", FieldType.U64, true, true), new Field("some_value",FieldType.I32, true)]));
-            TablesListView.Items.Add(new { Name = "PoSosy" });
+            TablesListView.Items.Add(new Table(
+                "Some table",
+                [new Field("id", FieldType.U64, true, true), new Field("value_a",FieldType.U32, true),
+                 new Field("value_b", FieldType.Bool, true), new Field("value_c", FieldType.I32, true)]
+                ));
         }
 
         private void CreateTableButton_Click(object sender, RoutedEventArgs e)

@@ -13,30 +13,39 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" x:Name="WindowTitleText" Text="Filter Records" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+        <TextBlock Grid.Row="0"
+               x:Name="WindowTitleText"
+               Text="Filter Records"
+               FontSize="16"
+               FontWeight="Bold"
+               Margin="0,0,0,10"/>
 
-        <DataGrid x:Name="FiltersDataGrid" Grid.Row="1" AutoGenerateColumns="False" 
-                  CanUserAddRows="True" CanUserDeleteRows="True" Margin="0,0,0,10">
+        <!-- Here is the DataGrid -->
+        <DataGrid Grid.Row="1"
+              x:Name="FiltersGrid"
+              AutoGenerateColumns="False"
+              ItemsSource="{Binding Result}"
+              CanUserAddRows="False">
+
             <DataGrid.Columns>
-                <DataGridComboBoxColumn Header="Field" 
-                                      ItemsSource="{Binding AvailableFields}"
-                                      SelectedValueBinding="{Binding Field}" Width="150"/>
-                <DataGridComboBoxColumn Header="Comparison" 
-                                      ItemsSource="{Binding Comparisons}"
-                                      SelectedItemBinding="{Binding Comparison}" Width="100"/>
-                <DataGridTemplateColumn Header="Value" Width="150">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBox Text="{Binding Value}"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Field"
+                                Binding="{Binding field.Name}" />
+
+                <DataGridTextColumn Header="Type"
+                                Binding="{Binding field.type}" />
+
+                <DataGridTextColumn Header="Value"
+                                Binding="{Binding value}" />
             </DataGrid.Columns>
         </DataGrid>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
-            <Button x:Name="ApplyButton" Content="Apply" Width="80" Height="30" Margin="5"/>
-            <Button x:Name="CancelButton" Content="Cancel" Width="80" Height="30" Margin="5"/>
+            <Button x:Name="AddFilterButton" Click="AddFilterButton_Click"
+                Content="Add filter" Width="80" Height="30" Margin="5"/>
+            <Button x:Name="ApplyButton" Click="ApplyButton_Click"
+                Content="Apply" Width="80" Height="30" Margin="5"/>
+            <Button x:Name="CancelButton" Click="CancelButton_Click"
+                Content="Cancel" Width="80" Height="30" Margin="5"/>
         </StackPanel>
     </Grid>
 </Window>

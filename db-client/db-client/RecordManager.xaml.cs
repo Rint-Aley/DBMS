@@ -1,18 +1,6 @@
 ﻿using db_client.QueryWindows;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace db_client
 {
@@ -86,34 +74,34 @@ namespace db_client
             if (addRecordsWindow.ShowDialog() == true)
             {
                 List<string> newRecordValues = addRecordsWindow.Result!;
-                // TODO: Call fucntion
+                // TODO: Call rpc
             }
         }
 
         private void DeleteRecordsButton_Click(object sender, RoutedEventArgs e)
         {
-            var filterSettingsWindow = new FilterSettings();
-            filterSettingsWindow.ShowDialog();
-            // TODO: Collect information and call fucntion
-        }
-
-        private void SelectRecordsButton_Click(object sender, RoutedEventArgs e)
-        {
-            var filterSettingsWindow = new FilterSettings();
-            filterSettingsWindow.ShowDialog();
-            // TODO: Change Preferences
+            var filterSettingsWindow = new FilterSettings(Table.Fields);
+            if (filterSettingsWindow.ShowDialog() == true)
+            {
+                var filterOptions = filterSettingsWindow.Result.ToList();
+                // TODO: Call rpc
+            }
         }
 
         private void ChangeRecordsButton_Click(object sender, RoutedEventArgs e)
         {
-            var changeRecordsWindow = new ChangeRecords();
-            changeRecordsWindow.ShowDialog();
-            // TODO: Collect information and call fucntion
+            var changeRecordsWindow = new ChangeRecords(Table.Fields);
+            if (changeRecordsWindow.ShowDialog() == true)
+            {
+                var changes = changeRecordsWindow.Changes.ToList();
+                var fiters = changeRecordsWindow.Filters.ToList();
+                // TODO: Call rpc
+            }
         }
 
         private void ClearTableButton_Click(object sender, RoutedEventArgs e)
         {
-            // TODO: Call clear table
+            // TODO: Call rpc
         }
     }
 }

@@ -22,7 +22,6 @@
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
             <Button x:Name="AddRecordsButton" Click="AddRecordsButton_Click" Content="Add Records" Width="100" Height="30" Margin="5"/>
             <Button x:Name="DeleteRecordsButton" Click="DeleteRecordsButton_Click" Content="Delete Records" Width="100" Height="30" Margin="5"/>
-            <Button x:Name="SelectRecordsButton" Click="SelectRecordsButton_Click"  Content="Select Records" Width="100" Height="30" Margin="5"/>
             <Button x:Name="ChangeRecordsButton" Click="ChangeRecordsButton_Click" Content="Change Records" Width="100" Height="30" Margin="5"/>
             <Button x:Name="ClearTableButton" Click="ClearTableButton_Click" Content="Clear Table" Width="80" Height="30" Margin="5"/>
             <Button x:Name="ExitButton" Click="ExitButton_Click" Content="Exit" Width="60" Height="30" Margin="5"/>

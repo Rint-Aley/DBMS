@@ -20,46 +20,49 @@
 
         <TextBlock Grid.Row="1" Text="Filters:" FontSize="14" FontWeight="Bold" Margin="0,0,0,5"/>
 
-        <DataGrid x:Name="FiltersDataGrid" Grid.Row="2" AutoGenerateColumns="False" 
-                  CanUserAddRows="True" CanUserDeleteRows="True" Margin="0,0,0,10">
+        <DataGrid Grid.Row="2"
+              x:Name="FiltersGrid"
+              AutoGenerateColumns="False"
+              ItemsSource="{Binding Filters}"
+              CanUserAddRows="False">
+
             <DataGrid.Columns>
-                <DataGridComboBoxColumn Header="Field" 
-                                      ItemsSource="{Binding AvailableFields}"
-                                      SelectedValueBinding="{Binding Field}" Width="150"/>
-                <DataGridComboBoxColumn Header="Comparison" 
-                                      ItemsSource="{Binding Comparisons}"
-                                      SelectedItemBinding="{Binding Comparison}" Width="100"/>
-                <DataGridTemplateColumn Header="Value" Width="150">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBox Text="{Binding Value}"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Field"
+                        Binding="{Binding field.Name}" />
+
+                <DataGridTextColumn Header="Type"
+                        Binding="{Binding field.type}" />
+
+                <DataGridTextColumn Header="Value"
+                        Binding="{Binding value}" />
             </DataGrid.Columns>
         </DataGrid>
 
         <TextBlock Grid.Row="3" Text="Changes to Apply:" FontSize="14" FontWeight="Bold" Margin="0,0,0,5"/>
 
-        <DataGrid x:Name="ChangesDataGrid" Grid.Row="4" AutoGenerateColumns="False" 
-                  CanUserAddRows="True" CanUserDeleteRows="True" Margin="0,0,0,10">
+        <DataGrid Grid.Row="4"
+              x:Name="ChangesGrid"
+              AutoGenerateColumns="False"
+              ItemsSource="{Binding Changes}"
+              CanUserAddRows="False">
+
             <DataGrid.Columns>
-                <DataGridComboBoxColumn Header="Field" 
-                                      ItemsSource="{Binding AvailableFields}"
-                                      SelectedValueBinding="{Binding Field}" Width="150"/>
-                <DataGridTemplateColumn Header="New Value" Width="150">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBox Text="{Binding NewValue}"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Field"
+                Binding="{Binding field.Name}" />
+
+                <DataGridTextColumn Header="Type"
+                Binding="{Binding field.type}" />
+
+                <DataGridTextColumn Header="Value"
+                Binding="{Binding value}" />
             </DataGrid.Columns>
         </DataGrid>
 
         <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Center">
-            <Button x:Name="ApplyButton" Content="Apply Changes" Width="100" Height="30" Margin="5"/>
-            <Button x:Name="CancelButton" Content="Cancel" Width="80" Height="30" Margin="5"/>
+            <Button x:Name="AddFilter" Click="AddFilter_Click" Content="Add Filter" Width="100" Height="30" Margin="5"/>
+            <Button x:Name="AddChange" Click="AddChange_Click" Content="Add Change" Width="100" Height="30" Margin="5"/>
+            <Button x:Name="ApplyButton" Click="ApplyButton_Click" Content="Apply Changes" Width="100" Height="30" Margin="5"/>
+            <Button x:Name="CancelButton" Click="CancelButton_Click" Content="Cancel" Width="80" Height="30" Margin="5"/>
         </StackPanel>
     </Grid>
 </Window>
